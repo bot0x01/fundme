@@ -1,28 +1,43 @@
-// SPDX-Licence-Identifier: MIT
+// SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.18;
+pragma solidity 0.8.19;
 
-import {Test, console} from "forge-std/Test.sol";
-import {FundMe} from "../../src/FundMe.sol";
 import {DeployFundMe} from "../../script/DeployFundMe.s.sol";
-import {FundFundMe} from "../../script/Interactions.s.sol";
-import {WithdrawFundMe} from "../../script/Interactions.s.sol";
+import {FundFundMe, WithdrawFundMe} from "../../script/Interactions.s.sol";
+import {FundMe} from "../../src/FundMe.sol";
+import {HelperConfig} from "../../script/HelperConfig.s.sol";
+import {Test, console} from "forge-std/Test.sol";
+import {StdCheats} from "forge-std/StdCheats.sol";
+import {ZkSyncChainChecker} from "lib/foundry-devops/src/ZkSyncChainChecker.sol";
 
-contract InteractionsTest is Test {
-    FundMe fundMe;
+contract InteractionsTest is ZkSyncChainChecker, StdCheats, Test {
+    FundMe public fundMe;
+    HelperConfig public helperConfig;
 
-    address USER = makeAddr("user");
-    uint256 constant SEND_VALUE = 1 ether;
-    uint256 constant STARTING_BALANCE = 50000 ether;
-    uint256 constant GAS_PRICE = 1;
+    uint256 public constant SEND_VALUE = 0.1 ether; // just a value to make sure we are sending enough!
+    uint256 public constant STARTING_USER_BALANCE = 10 ether;
+    uint256 public constant GAS_PRICE = 1;
 
-    function setUp() external {
-        DeployFundMe deployFundMe = new DeployFundMe();
-        fundMe = deployFundMe.run();
-        vm.deal(USER, STARTING_BALANCE);
+    address public constant USER = address(1);
+
+    // uint256 public constant SEND_VALUE = 1e18;
+    // uint256 public constant SEND_VALUE = 1_000_000_000_000_000_000;
+    // uint256 public constant SEND_VALUE = 1000000000000000000;
+
+    function setUp() external skipZkSync {
+        if (!isZkSyncChain()) {
+            DeployFundMe deployer = new DeployFundMe();
+            (fundMe, helperConfig) = deployer.deployFundMe();
+        } else {
+            helperConfig = new HelperConfig();
+            fundMe = new FundMe(
+                helperConfig.getConfigByChainId(block.chainid).priceFeed
+            );
+        }
+        vm.deal(USER, STARTING_USER_BALANCE);
     }
 
-    function testUserCanFundInteractions() public payable {
+    function testUserCanFundAndOwnerWithdraw() public skipZkSync {
         uint256 preUserBalance = address(USER).balance;
         uint256 preOwnerBalance = address(fundMe.getOwner()).balance;
 
